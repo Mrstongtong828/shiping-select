@@ -8,6 +8,7 @@ from typing import Awaitable, Iterable
 
 from dotenv import load_dotenv
 
+from src.evaluate import evaluate_records
 from src.exporters import export_csv, export_json, export_markdown, export_run_log
 from src.logging_utils import setup_logger
 from src.schema import SearchSummary, VideoRecord
@@ -33,6 +34,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=6000,
         help="Max subtitle characters kept for each video",
+    )
+    parser.add_argument(
+        "--skip-evaluate",
+        action="store_true",
+        help="Skip the LLM evaluation stage",
     )
     return parser
 
@@ -94,10 +100,14 @@ def build_summary(records: list[VideoRecord], errors: list[str]) -> SearchSummar
     total_records = len(records)
     subtitle_success_count = sum(1 for record in records if record.has_subtitle)
     subtitle_success_ratio = 0.0 if total_records == 0 else subtitle_success_count / total_records
+    evaluation_success_count = sum(1 for record in records if record.recommend in {"yes", "no"})
+    evaluation_success_ratio = 0.0 if total_records == 0 else evaluation_success_count / total_records
     return SearchSummary(
         total_records=total_records,
         subtitle_success_count=subtitle_success_count,
         subtitle_success_ratio=subtitle_success_ratio,
+        evaluation_success_count=evaluation_success_count,
+        evaluation_success_ratio=evaluation_success_ratio,
         errors=errors,
     )
 
@@ -132,17 +142,22 @@ async def async_main() -> None:
         max_results=args.max,
         subtitle_limit=args.subtitle_limit,
     )
+    if not args.skip_evaluate:
+        evaluated_records, evaluation_errors = await evaluate_records(args.topic, records)
+        records = evaluated_records
+        errors.extend(evaluation_errors)
     summary = build_summary(records, errors)
     exported = export_results(args.topic, records, summary)
 
     LOGGER.info(
-        "Done total=%s subtitle_success=%s ratio=%.2f",
+        "Done total=%s subtitle_success=%s eval_success=%s",
         summary.total_records,
         summary.subtitle_success_count,
-        summary.subtitle_success_ratio,
+        summary.evaluation_success_count,
     )
     print(f"Done. total_records={summary.total_records}")
     print(f"subtitle_success_count={summary.subtitle_success_count}")
+    print(f"evaluation_success_count={summary.evaluation_success_count}")
     print(f"csv={exported['csv']}")
     print(f"json={exported['json']}")
     print(f"md={exported['md']}")

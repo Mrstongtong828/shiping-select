@@ -23,6 +23,8 @@ def build_csv_rows(records: list[VideoRecord]) -> list[dict[str, object]]:
                 "relevance": record.relevance,
                 "depth": record.depth,
                 "clarity": record.clarity,
+                "has_math": record.has_math,
+                "has_code": record.has_code,
                 "audience": record.audience,
                 "recommend": record.recommend,
                 "reason": record.reason,
@@ -56,6 +58,8 @@ def export_markdown(path: Path, topic: str, records: list[VideoRecord], summary:
         f"- Total records: {summary.total_records}",
         f"- Subtitle success count: {summary.subtitle_success_count}",
         f"- Subtitle success ratio: {summary.subtitle_success_ratio:.0%}",
+        f"- Evaluation success count: {summary.evaluation_success_count}",
+        f"- Evaluation success ratio: {summary.evaluation_success_ratio:.0%}",
     ]
     if summary.errors:
         lines.append(f"- Errors: {'; '.join(summary.errors)}")
@@ -66,7 +70,8 @@ def export_markdown(path: Path, topic: str, records: list[VideoRecord], summary:
     else:
         for record in fallback[:10]:
             reason = record.reason or "Evaluation module not connected yet."
-            lines.append(f"- [{record.title}]({record.url}) | {record.platform} | {reason}")
+            score = f"relevance={record.relevance}, depth={record.depth}, clarity={record.clarity}"
+            lines.append(f"- [{record.title}]({record.url}) | {record.platform} | {score} | {reason}")
 
     path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -77,6 +82,8 @@ def export_run_log(path: Path, topic: str, summary: SearchSummary) -> None:
         f"total_records={summary.total_records}",
         f"subtitle_success_count={summary.subtitle_success_count}",
         f"subtitle_success_ratio={summary.subtitle_success_ratio:.4f}",
+        f"evaluation_success_count={summary.evaluation_success_count}",
+        f"evaluation_success_ratio={summary.evaluation_success_ratio:.4f}",
         f"errors={len(summary.errors)}",
     ]
     lines.extend(f"error={error}" for error in summary.errors)
