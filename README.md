@@ -1,6 +1,6 @@
 # 视频学习资源智能筛选系统
 
-一个面向教学场景的多平台视频检索与筛选项目。系统输入一个学习主题后，自动从 B 站和 YouTube 检索候选视频，抓取基础元数据与字幕信息，并为后续的大模型评估、学习路径整理和结果导出提供统一数据结构。
+一个面向教学场景的多平台视频检索与筛选项目。系统输入一个学习主题后，自动从 B 站和 YouTube 检索候选视频，抓取基础元数据与字幕信息，并在配置大模型后自动完成结构化评估，最终输出 CSV、JSON、Markdown 和运行日志。
 
 本项目严格按照《视频学习资源智能筛选系统》项目书要求开发，采用“模块化 + 数据流”架构，保证各模块职责单一、便于测试和后续扩展。
 
@@ -13,10 +13,11 @@
 - YouTube 搜索
 - YouTube 字幕抓取
 - 统一数据模型
+- LLM 结构化评估
 - 主程序调度与结果导出
 - 基础日志输出
 
-当前为第一阶段版本，`LLM 评估`、`ASR 兜底`、`抖音抓取` 仍保留接口占位，后续继续迭代。
+当前为第一阶段可运行版本，`ASR 兜底`、`抖音抓取` 仍保留接口占位，后续继续迭代。
 
 ## 项目结构
 
@@ -40,7 +41,7 @@ video-finder/
 |  |- search_youtube.py     # YouTube 搜索 + 字幕
 |  |- search_douyin.py      # 抖音抓取（选做，占位）
 |  |- asr_whisper.py        # ASR 兜底（选做，占位）
-|  |- evaluate.py           # LLM 评估引擎（占位）
+|  |- evaluate.py           # LLM 评估引擎
 |- tests/
 |  |- test_bilibili.py
 |  |- test_evaluate.py
@@ -48,16 +49,16 @@ video-finder/
 
 ## 技术路线
 
-本项目当前主线如下：
+当前主线如下：
 
 1. 用户输入主题
 2. 多平台并发检索候选视频
 3. 抓取视频标题、作者、播放量、点赞数、发布时间等元数据
 4. 获取字幕文本
-5. 统一整理为结构化数据
+5. 调用大模型完成结构化评估
 6. 导出 CSV / JSON / Markdown / 运行日志
 
-当前重点是先把“检索 + 字幕”这条主链做稳，再接入第二阶段的评估模块。
+当前重点是先把“检索 + 字幕 + 评估”这条主链做稳，再继续补充第二阶段的 ASR 和拓展平台。
 
 ## 依赖环境
 
@@ -69,6 +70,7 @@ video-finder/
 - `httpx`
 - `google-api-python-client`
 - `youtube-transcript-api`
+- `openai`
 - `pydantic`
 - `pandas`
 - `python-dotenv`
@@ -113,11 +115,7 @@ copy .env.example .env
 cp .env.example .env
 ```
 
-至少需要配置：
-
-- `YOUTUBE_API_KEY`
-
-示例：
+`.env` 示例：
 
 ```env
 YOUTUBE_API_KEY=your_youtube_api_key
@@ -128,68 +126,100 @@ OPENAI_MODEL=deepseek-chat
 
 说明：
 
-- 当前阶段 B 站模块不需要单独 API Key
-- 后续接入 `evaluate.py` 时需要 `OPENAI_API_KEY`
+- `YOUTUBE_API_KEY`：YouTube 搜索必需
+- `OPENAI_API_KEY`：评估阶段必需
+- `OPENAI_BASE_URL`：可填 DeepSeek、OpenAI 兼容服务地址
+- `OPENAI_MODEL`：例如 `deepseek-chat`
+
+如果没有配置 `OPENAI_API_KEY`，程序会自动跳过评估阶段，不会影响检索和字幕抓取。
 
 ## 运行方式
 
-### 同时检索 B 站和 YouTube
+### 1. 同时检索 B 站和 YouTube，并执行评估
 
 ```bash
 python main.py --topic "PCA 主成分分析" --platform bilibili,youtube --max 30
 ```
 
-### 仅检索 B 站
+### 2. 仅检索 B 站，并执行评估
 
 ```bash
 python main.py --topic "PCA 主成分分析" --platform bilibili --max 15
 ```
 
-### 仅检索 YouTube
+### 3. 仅检索 YouTube，并执行评估
 
 ```bash
 python main.py --topic "PCA principal component analysis" --platform youtube --max 15
+```
+
+### 4. 调试模式：跳过评估，只跑检索和字幕
+
+```bash
+python main.py --topic "PCA 主成分分析" --platform bilibili,youtube --max 30 --skip-evaluate
+```
+
+### 5. 控制单条字幕保留长度
+
+```bash
+python main.py --topic "PCA 主成分分析" --platform bilibili,youtube --max 30 --subtitle-limit 4000
 ```
 
 ## 当前输出文件
 
 程序运行后会在 `results/` 目录生成：
 
-- `*.csv`：面向后续筛选与人工查看的表格结果
+- `*.csv`：面向筛选与人工查看的主结果表
 - `*.json`：完整结构化原始结果
 - `*.md`：简要 Markdown 摘要
 - `*_run.log`：单次运行统计结果
 - `runtime.log`：运行过程日志
 
-## 当前数据字段
+## CSV 主要字段
 
-当前统一数据结构包含：
+当前 CSV 已包含项目书要求的核心字段以及运行辅助字段：
 
 - `platform`
-- `video_id`
 - `title`
 - `url`
 - `author`
 - `view`
 - `like`
-- `duration`
-- `publish_time`
-- `description`
 - `has_subtitle`
-- `subtitle_text`
-- `subtitle_language`
-- `subtitle_source`
-
-为了与项目书后续验收字段对齐，当前还预留了这些评估字段：
-
 - `relevance`
 - `depth`
 - `clarity`
 - `audience`
 - `recommend`
 - `reason`
+- `video_id`
+- `duration`
+- `publish_time`
+- `subtitle_language`
+- `subtitle_source`
 
-这些字段会在后续接入 `evaluate.py` 后真正赋值。
+其中 `has_math`、`has_code` 当前保存在结构化结果里，也会参与评估与后续推荐逻辑。
+
+## 评估模块说明
+
+`src/evaluate.py` 当前支持 OpenAI 兼容接口，默认行为如下：
+
+- 检测到 `OPENAI_API_KEY` 后自动启用评估
+- 使用 `response_format=json_object` 约束输出为 JSON
+- 通过 `pydantic` 校验结构化结果
+- 单条失败自动重试
+- 失败样本保留原始检索结果，不会中断整批流程
+
+评估输出字段包括：
+
+- `relevance`
+- `depth`
+- `clarity`
+- `has_math`
+- `has_code`
+- `audience`
+- `recommend`
+- `reason`
 
 ## 模块说明
 
@@ -199,6 +229,7 @@ python main.py --topic "PCA principal component analysis" --platform youtube --m
 
 - 解析命令行参数
 - 调度不同平台搜索模块
+- 调度评估模块
 - 聚合结果
 - 生成输出文件
 
@@ -217,6 +248,14 @@ python main.py --topic "PCA principal component analysis" --platform youtube --m
 - YouTube 视频搜索
 - 获取视频统计信息
 - 拉取 YouTube transcript
+
+### `src/evaluate.py`
+
+负责：
+
+- 加载评估 Prompt
+- 调用 OpenAI 兼容模型
+- 解析并校验结构化评估结果
 
 ### `src/schema.py`
 
@@ -242,7 +281,7 @@ python main.py --topic "PCA principal component analysis" --platform youtube --m
 pytest
 ```
 
-当前测试以基础数据结构和 Prompt 文件存在性检查为主，后续会继续补充模块级测试和集成测试。
+当前测试以基础数据结构、Prompt 关键字段和评估模块开关逻辑检查为主，后续会继续补充模块级测试和集成测试。
 
 ## 参考项目
 
@@ -262,15 +301,15 @@ pytest
 
 下一阶段将继续实现：
 
-- `evaluate.py`：基于字幕与元数据的大模型结构化评估
 - `results/*.md`：更接近项目书要求的人话版推荐清单
 - `asr_whisper.py`：无字幕视频的 ASR 兜底
 - 缓存、重试与更细粒度异常处理
-- 测试完善与 README 细化
+- 测试完善与 README 继续细化
 
 ## 注意事项
 
 - 请勿将 `.env` 提交到仓库
 - YouTube 搜索依赖 API Key，请注意每日 quota
-- 当前版本以“先跑通主线”为目标，推荐排序逻辑尚未接入
+- 大模型评估会消耗调用额度，建议先小样本调试
+- 若只测试检索链路，建议加 `--skip-evaluate`
 
