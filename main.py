@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import logging
 from pathlib import Path
-from typing import Awaitable, Iterable
+from typing import Awaitable
 
 from dotenv import load_dotenv
 
@@ -46,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
 def slugify_topic(topic: str) -> str:
     chars: list[str] = []
     for ch in topic:
-        if ch.isalnum() or ch in {"_", "-", " "} or ("\u4e00" <= ch <= "\u9fff"):
+        if ch.isalnum() or ch in {"_", "-", " "} or ("一" <= ch <= "鿿"):
             chars.append(ch)
         else:
             chars.append("_")
@@ -55,7 +55,7 @@ def slugify_topic(topic: str) -> str:
 
 async def gather_records(
     topic: str,
-    platforms: Iterable[str],
+    platforms: list[str],
     max_results: int,
     subtitle_limit: int,
 ) -> tuple[list[VideoRecord], list[str]]:
@@ -64,27 +64,17 @@ async def gather_records(
         raise ValueError("At least one platform is required")
 
     per_platform = max(1, max_results // len(platform_list))
-    tasks: list[tuple[str, Awaitable[list[VideoRecord]]]] = []
+    coros: dict[str, Awaitable[list[VideoRecord]]] = {}
 
     if "bilibili" in platform_list:
-        tasks.append(
-            (
-                "bilibili",
-                search_bilibili_videos(topic=topic, limit=per_platform, subtitle_limit=subtitle_limit),
-            )
-        )
+        coros["bilibili"] = search_bilibili_videos(topic=topic, limit=per_platform, subtitle_limit=subtitle_limit)
     if "youtube" in platform_list:
-        tasks.append(
-            (
-                "youtube",
-                search_youtube_videos(topic=topic, limit=per_platform, subtitle_limit=subtitle_limit),
-            )
-        )
+        coros["youtube"] = search_youtube_videos(topic=topic, limit=per_platform, subtitle_limit=subtitle_limit)
 
-    results = await asyncio.gather(*(task for _, task in tasks), return_exceptions=True)
+    results = await asyncio.gather(*coros.values(), return_exceptions=True)
     merged: list[VideoRecord] = []
     errors: list[str] = []
-    for (platform_name, _), batch in zip(tasks, results):
+    for platform_name, batch in zip(coros, results):
         if isinstance(batch, Exception):
             message = f"{platform_name} search failed: {batch}"
             LOGGER.error(message)
@@ -98,16 +88,19 @@ async def gather_records(
 
 def build_summary(records: list[VideoRecord], errors: list[str]) -> SearchSummary:
     total_records = len(records)
-    subtitle_success_count = sum(1 for record in records if record.has_subtitle)
-    subtitle_success_ratio = 0.0 if total_records == 0 else subtitle_success_count / total_records
-    evaluation_success_count = sum(1 for record in records if record.recommend in {"yes", "no"})
-    evaluation_success_ratio = 0.0 if total_records == 0 else evaluation_success_count / total_records
+    subtitle_success_count = 0
+    evaluation_success_count = 0
+    for record in records:
+        if record.has_subtitle:
+            subtitle_success_count += 1
+        if record.recommend in {"yes", "no"}:
+            evaluation_success_count += 1
     return SearchSummary(
         total_records=total_records,
         subtitle_success_count=subtitle_success_count,
-        subtitle_success_ratio=subtitle_success_ratio,
+        subtitle_success_ratio=subtitle_success_count / total_records if total_records else 0.0,
         evaluation_success_count=evaluation_success_count,
-        evaluation_success_ratio=evaluation_success_ratio,
+        evaluation_success_ratio=evaluation_success_count / total_records if total_records else 0.0,
         errors=errors,
     )
 
@@ -155,13 +148,15 @@ async def async_main() -> None:
         summary.subtitle_success_count,
         summary.evaluation_success_count,
     )
-    print(f"Done. total_records={summary.total_records}")
-    print(f"subtitle_success_count={summary.subtitle_success_count}")
-    print(f"evaluation_success_count={summary.evaluation_success_count}")
-    print(f"csv={exported['csv']}")
-    print(f"json={exported['json']}")
-    print(f"md={exported['md']}")
-    print(f"log={exported['log']}")
+    print(
+        f"Done. total_records={summary.total_records}\n"
+        f"subtitle_success_count={summary.subtitle_success_count}\n"
+        f"evaluation_success_count={summary.evaluation_success_count}\n"
+        f"csv={exported['csv']}\n"
+        f"json={exported['json']}\n"
+        f"md={exported['md']}\n"
+        f"log={exported['log']}"
+    )
 
 
 if __name__ == "__main__":

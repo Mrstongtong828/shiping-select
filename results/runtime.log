@@ -1,0 +1,3 @@
+2026-05-16 17:07:24,870 | INFO | Start topic=PCA 主成分分析 platforms=bilibili max=5
+2026-05-16 17:07:36,608 | INFO | bilibili search finished with 4 records
+2026-05-16 17:07:36,637 | INFO | Done total=4 subtitle_success=0 eval_success=0
