@@ -1,5 +1,30 @@
+# Environment and secrets
 .env
+**/.env
+*.env.local
+
+# Python virtual environments and caches
 .venv/
+**/.venv/
+.codex-venv/
+**/.codex-venv/
 __pycache__/
+**/__pycache__/
 .pytest_cache/
+**/.pytest_cache/
+
+# Runtime outputs
 results/
+**/results/
+*.log
+
+# Generated unpacked office files
+docx_unpacked_read/
+pptx_unpacked/
+pptx_from_backup/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
