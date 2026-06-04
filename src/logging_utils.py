@@ -20,4 +20,3 @@ def setup_logger(log_path: Path) -> logging.Logger:
     logger.addHandler(file_handler)
 
     return logger
-

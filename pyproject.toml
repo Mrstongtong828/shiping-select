@@ -1,0 +1,27 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.black]
+line-length = 120
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | __pycache__
+  | results
+  | shiping-select-main
+  | douyinpachong-main
+)/
+'''
+
+[tool.ruff]
+line-length = 120
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "results",
+    "shiping-select-main",
+    "douyinpachong-main",
+]

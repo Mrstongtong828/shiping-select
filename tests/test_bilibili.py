@@ -14,4 +14,3 @@ def test_video_record_accepts_bilibili_payload():
     assert record.platform == "bilibili"
     assert record.has_subtitle is True
     assert record.subtitle_text == "这是字幕"
-

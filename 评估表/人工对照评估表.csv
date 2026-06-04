@@ -1,0 +1,11 @@
+序号,平台,视频标题,视频链接,系统recommend,人工recommend,是否一致,人工备注
+1,youtube,什么是降维算法？PCA主成分分析的原理详解,https://www.youtube.com/watch?v=WquvZBWzI5Q,no,yes,no,视频讲解清楚，虽然没有字幕但人工认为可推荐
+2,youtube,用最直观的方式告诉你：什么是主成分分析PCA,https://www.youtube.com/watch?v=DSS7MmhXjr8,yes,yes,yes,
+3,youtube,4.4.1 主成分分析 PCA,https://www.youtube.com/watch?v=u-W4yWy3JSk,no,no,yes,
+4,youtube,主成分分析,https://www.youtube.com/watch?v=jkZfBAgtRq0,yes,yes,yes,没有字幕但内容相关
+5,youtube,"StatQuest: Principal Component Analysis (PCA), Step-by-Step",https://www.youtube.com/watch?v=FgakZw6K1QQ,yes,yes,yes,
+6,youtube,一分钟了解主成分分析,https://www.youtube.com/watch?v=crUrpPUp7w0,no,yes,no,适合初学者快速了解概念
+7,youtube,机器学习基础 PCA 主成分分析,https://www.youtube.com/watch?v=-S2_GN9FXh8,yes,yes,yes,
+8,youtube,Principal Component Analysis (PCA) - easy and practical explanation,https://www.youtube.com/watch?v=5vgP05YpKdE,yes,yes,yes,
+9,youtube,Principal Component Analysis (PCA),https://www.youtube.com/watch?v=fkf4IBRSeEc,yes,yes,yes,
+10,youtube,Principal Component Analysis (PCA) Explained: Simplify Complex Data for Machine Learning,https://www.youtube.com/watch?v=ZgyY3JuGQY8,no,no,yes,

@@ -1,0 +1,9 @@
+topic=PCA 主成分分析
+total_records=30
+subtitle_success_count=3
+subtitle_success_ratio=0.1000
+evaluation_success_count=30
+evaluation_success_ratio=1.0000
+platform_counts=bilibili:15,youtube:15
+subtitle_source_counts=youtube_transcript:3
+errors=0

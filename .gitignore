@@ -16,7 +16,13 @@ __pycache__/
 # Runtime outputs
 results/
 **/results/
+提交包/
+**/提交包/
 *.log
+
+# Local code intelligence indexes
+.codegraph/
+**/.codegraph/
 
 # Generated unpacked office files
 docx_unpacked_read/

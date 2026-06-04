@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -8,8 +9,9 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from src.cache_utils import build_cache_key, load_json_cache, save_json_cache
+from src.env_utils import is_real_env_value
 from src.schema import EvaluationResult, VideoRecord
-
 
 PROMPT_PATH = Path("prompts/eval_template.txt")
 LOGGER = logging.getLogger("video_finder")
@@ -20,7 +22,7 @@ def load_eval_prompt() -> str:
 
 
 def evaluation_enabled() -> bool:
-    return bool(os.getenv("OPENAI_API_KEY"))
+    return is_real_env_value(os.getenv("OPENAI_API_KEY"))
 
 
 def _clip_text(text: str, limit: int) -> str:
@@ -47,14 +49,36 @@ def _create_client():
     try:
         from openai import AsyncOpenAI
     except ImportError as exc:
-        raise RuntimeError("缺少 openai 依赖，请先安装 requirements.txt") from exc
+        raise RuntimeError("Missing openai dependency. Please install requirements.txt") from exc
 
     api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError("缺少 OPENAI_API_KEY，无法执行评估")
+    if not is_real_env_value(api_key):
+        raise RuntimeError("Missing OPENAI_API_KEY, cannot evaluate")
 
     base_url = os.getenv("OPENAI_BASE_URL") or None
     return AsyncOpenAI(api_key=api_key, base_url=base_url)
+
+
+def _evaluation_cache_key(topic: str, model: str, record: VideoRecord) -> str:
+    subtitle_digest = (
+        hashlib.sha1(record.subtitle_text.encode("utf-8")).hexdigest() if record.subtitle_text else "no_subtitle"
+    )
+    return build_cache_key(topic, model, record.platform, record.video_id, record.title, subtitle_digest)
+
+
+def _apply_evaluation(record: VideoRecord, parsed: EvaluationResult) -> VideoRecord:
+    return record.model_copy(
+        update={
+            "relevance": parsed.relevance,
+            "depth": parsed.depth,
+            "clarity": parsed.clarity,
+            "has_math": parsed.has_math,
+            "has_code": parsed.has_code,
+            "audience": parsed.audience,
+            "recommend": parsed.recommend,
+            "reason": parsed.reason,
+        }
+    )
 
 
 async def _evaluate_single_record(
@@ -64,7 +88,16 @@ async def _evaluate_single_record(
     record: VideoRecord,
     semaphore: asyncio.Semaphore,
     retries: int = 2,
+    use_cache: bool = True,
 ) -> VideoRecord:
+    cache_key = _evaluation_cache_key(topic, model, record)
+    if use_cache:
+        cached = load_json_cache("evaluations", cache_key)
+        if cached is not None:
+            LOGGER.info("Evaluation cache hit: video_id=%s", record.video_id)
+            parsed = EvaluationResult.model_validate(cached)
+            return _apply_evaluation(record, parsed)
+
     prompt = load_eval_prompt()
     messages = [
         {"role": "system", "content": prompt},
@@ -75,6 +108,7 @@ async def _evaluate_single_record(
         last_error: Exception | None = None
         for attempt in range(1, retries + 2):
             try:
+                LOGGER.info("Evaluation request start: video_id=%s attempt=%s", record.video_id, attempt)
                 response = await client.chat.completions.create(
                     model=model,
                     messages=messages,
@@ -83,28 +117,23 @@ async def _evaluate_single_record(
                 )
                 content = response.choices[0].message.content or "{}"
                 parsed = EvaluationResult.model_validate_json(content)
-                updated = record.model_copy(
-                    update={
-                        "relevance": parsed.relevance,
-                        "depth": parsed.depth,
-                        "clarity": parsed.clarity,
-                        "has_math": parsed.has_math,
-                        "has_code": parsed.has_code,
-                        "audience": parsed.audience,
-                        "recommend": parsed.recommend,
-                        "reason": parsed.reason,
-                    }
-                )
-                return updated
+                if use_cache:
+                    save_json_cache("evaluations", cache_key, parsed.model_dump())
+                LOGGER.info("Evaluation request success: video_id=%s attempt=%s", record.video_id, attempt)
+                return _apply_evaluation(record, parsed)
             except (json.JSONDecodeError, ValidationError, AttributeError, IndexError, TypeError, ValueError) as exc:
                 last_error = exc
-                LOGGER.warning("评估结果解析失败: video_id=%s attempt=%s error=%s", record.video_id, attempt, exc)
+                LOGGER.warning(
+                    "Evaluation parse failed: video_id=%s attempt=%s error=%s", record.video_id, attempt, exc
+                )
             except Exception as exc:
                 last_error = exc
-                LOGGER.warning("评估调用失败: video_id=%s attempt=%s error=%s", record.video_id, attempt, exc)
+                LOGGER.warning(
+                    "Evaluation request failed: video_id=%s attempt=%s error=%s", record.video_id, attempt, exc
+                )
             await asyncio.sleep(min(attempt, 3))
 
-    raise RuntimeError(f"评估失败 video_id={record.video_id}: {last_error}")
+    raise RuntimeError(f"Evaluation failed for {record.video_id}: {last_error}")
 
 
 async def evaluate_records(
@@ -112,19 +141,19 @@ async def evaluate_records(
     records: list[VideoRecord],
     *,
     concurrency: int = 5,
+    use_cache: bool = True,
 ) -> tuple[list[VideoRecord], list[str]]:
     if not records:
         return [], []
     if not evaluation_enabled():
-        LOGGER.info("未配置 OPENAI_API_KEY，跳过评估阶段")
+        LOGGER.info("OPENAI_API_KEY not configured, skip evaluation stage")
         return records, []
 
     client = _create_client()
     model = os.getenv("OPENAI_MODEL", "deepseek-chat")
     semaphore = asyncio.Semaphore(concurrency)
     tasks = [
-        _evaluate_single_record(client, model, topic, record, semaphore)
-        for record in records
+        _evaluate_single_record(client, model, topic, record, semaphore, use_cache=use_cache) for record in records
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 

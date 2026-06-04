@@ -4,21 +4,20 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
-PlatformName = Literal["bilibili", "youtube"]
+PlatformName = Literal["bilibili", "youtube", "douyin"]
 AudienceName = Literal["", "科普", "本科入门", "本科进阶", "研究生"]
 RecommendName = Literal["", "yes", "no"]
 
 
 class VideoRecord(BaseModel):
     platform: PlatformName
-    video_id: str = Field(description="平台内视频唯一标识，例如 bvid 或 YouTube videoId")
+    video_id: str = Field(description="平台内视频唯一标识，例如 B 站 bvid 或 YouTube videoId")
     title: str
     url: str
     author: str = ""
     view: int = 0
     like: int = 0
-    duration: int = Field(default=0, description="单位为秒")
+    duration: int = Field(default=0, description="视频时长，单位为秒")
     publish_time: str = ""
     description: str = ""
     has_subtitle: bool = False
@@ -58,4 +57,6 @@ class SearchSummary(BaseModel):
     subtitle_success_ratio: float = 0.0
     evaluation_success_count: int = 0
     evaluation_success_ratio: float = 0.0
+    platform_counts: dict[str, int] = Field(default_factory=dict)
+    subtitle_source_counts: dict[str, int] = Field(default_factory=dict)
     errors: list[str] = Field(default_factory=list)
